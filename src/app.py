@@ -46,12 +46,16 @@ class Dota2LoadingScreenDownloader(QWidget):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
 
+        self.credit_label = QLabel("Created by @NeetNestor", self)
+        self.credit_label.setStyleSheet("color: #808080;")
+
         layout = QVBoxLayout()
         layout.addWidget(self.folder_label)
         layout.addWidget(self.folder_button)
         layout.addWidget(self.download_button)
         layout.addWidget(self.status_label)
         layout.addWidget(self.progress_bar)
+        layout.addWidget(self.credit_label)
 
         # Show window
         self.setLayout(layout)
