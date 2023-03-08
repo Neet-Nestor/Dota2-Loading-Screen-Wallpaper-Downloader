@@ -43,13 +43,10 @@ class Dota2LoadingScreenDownloader(QWidget):
         self.folder_button = QPushButton("选择文件夹", self)
         self.folder_button.clicked.connect(self.selectFolder)
 
-        ratio_layout = QHBoxLayout()
         ratio_label = QLabel("壁纸比例：", self)
         self.ratio_combobox = QComboBox(self)
         self.ratio_combobox.addItems(ratio_selections)
         self.ratio_combobox.currentIndexChanged.connect(self.ratioSelected)
-        ratio_layout.addWidget(ratio_label)
-        ratio_layout.addWidget(self.ratio_combobox)
 
         self.download_button = QPushButton("开始下载", self)
         self.download_button.clicked.connect(self.startScrape)
@@ -77,18 +74,22 @@ class Dota2LoadingScreenDownloader(QWidget):
             label.setVisible(False)
             self.download_layout.addWidget(label)
 
-        self.credit_label = QLabel("v1.1; Created by @NeetNestor", self)
-        self.credit_label.setStyleSheet("color: #808080;")
+        credit_label = QLabel("Created by @NeetNestor", self)
+        version_label = QLabel("v1.1", self)
+        credit_label.setStyleSheet("color: #808080;")
+        version_label.setStyleSheet("color: #808080;")
 
         layout = QVBoxLayout()
         layout.addWidget(self.folder_label)
         layout.addWidget(self.folder_button)
-        layout.addLayout(ratio_layout)
+        layout.addWidget(ratio_label)
+        layout.addWidget(self.ratio_combobox)
         layout.addWidget(self.download_button)
         layout.addWidget(self.status_label)
         layout.addLayout(self.scrape_layout)
         layout.addLayout(self.download_layout)
-        layout.addWidget(self.credit_label)
+        layout.addWidget(version_label)
+        layout.addWidget(credit_label)
 
         # Show window
         self.setLayout(layout)
