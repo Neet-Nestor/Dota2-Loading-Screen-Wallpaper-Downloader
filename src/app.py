@@ -77,7 +77,7 @@ class Dota2LoadingScreenDownloader(QWidget):
             label.setVisible(False)
             self.download_layout.addWidget(label)
 
-        self.credit_label = QLabel("Created by @NeetNestor", self)
+        self.credit_label = QLabel("v1.1; Created by @NeetNestor", self)
         self.credit_label.setStyleSheet("color: #808080;")
 
         layout = QVBoxLayout()
