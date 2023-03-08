@@ -1,5 +1,6 @@
 import sys
 import queue
+import logging
 
 import downloader
 import scraper
@@ -7,14 +8,20 @@ import scraper
 from PyQt6.QtWidgets import (
     QApplication,
     QWidget,
+    QComboBox,
     QLabel,
     QProgressBar,
     QPushButton,
     QFileDialog,
     QVBoxLayout,
+    QHBoxLayout,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QIcon
+
+logging.basicConfig(filename="app.log", level=logging.DEBUG)
+
+ratio_selections = ["全部", "16x9", "16x10", "4x3"]
 
 
 class Dota2LoadingScreenDownloader(QWidget):
@@ -23,6 +30,7 @@ class Dota2LoadingScreenDownloader(QWidget):
         self.initUI()
 
         self.link_queue = queue.Queue()
+        self.ratio = None
 
     def initUI(self):
         # Set window properties
@@ -35,16 +43,39 @@ class Dota2LoadingScreenDownloader(QWidget):
         self.folder_button = QPushButton("选择文件夹", self)
         self.folder_button.clicked.connect(self.selectFolder)
 
+        ratio_layout = QHBoxLayout()
+        ratio_label = QLabel("壁纸比例：", self)
+        self.ratio_combobox = QComboBox(self)
+        self.ratio_combobox.addItems(ratio_selections)
+        self.ratio_combobox.currentIndexChanged.connect(self.ratioSelected)
+        ratio_layout.addWidget(ratio_label)
+        ratio_layout.addWidget(self.ratio_combobox)
+
         self.download_button = QPushButton("开始下载", self)
         self.download_button.clicked.connect(self.startScrape)
 
         self.status_label = QLabel("", self)
         self.status_label.setStyleSheet("color: black;")
 
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setGeometry(20, 130, 360, 30)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
+        self.scrape_layout = QHBoxLayout()
+        self.scrape_labels = (
+            QLabel("页面总数: 0", self),
+            QLabel("爬取页面: 0", self),
+            QLabel("跳过爬取: 0", self),
+            QLabel("爬取壁纸总数: 0", self),
+        )
+        for label in self.scrape_labels:
+            label.setVisible(False)
+            self.scrape_layout.addWidget(label)
+
+        self.download_layout = QHBoxLayout()
+        self.download_labels = (
+            QLabel("已下载壁纸: 0", self),
+            QLabel("下载失败: 0", self),
+        )
+        for label in self.download_labels:
+            label.setVisible(False)
+            self.download_layout.addWidget(label)
 
         self.credit_label = QLabel("Created by @NeetNestor", self)
         self.credit_label.setStyleSheet("color: #808080;")
@@ -52,9 +83,11 @@ class Dota2LoadingScreenDownloader(QWidget):
         layout = QVBoxLayout()
         layout.addWidget(self.folder_label)
         layout.addWidget(self.folder_button)
+        layout.addLayout(ratio_layout)
         layout.addWidget(self.download_button)
         layout.addWidget(self.status_label)
-        layout.addWidget(self.progress_bar)
+        layout.addLayout(self.scrape_layout)
+        layout.addLayout(self.download_layout)
         layout.addWidget(self.credit_label)
 
         # Show window
@@ -69,6 +102,9 @@ class Dota2LoadingScreenDownloader(QWidget):
         self.status_label.setStyleSheet("color: black;")
         self.folder = folder
 
+    def ratioSelected(self, ratio_index):
+        self.ratio = ratio_selections[ratio_index] if ratio_index > 0 else None
+
     def startScrape(self):
         # Check if folder has been selected
         if not hasattr(self, "folder"):
@@ -79,48 +115,73 @@ class Dota2LoadingScreenDownloader(QWidget):
         # Update status
         self.status_label.setText("爬取壁纸中...")
         self.status_label.setStyleSheet("color: black;")
+        for label in self.scrape_labels:
+            label.setVisible(True)
 
         # Create a scraper thread and start it
-        self.thread = ScraperThread(self.link_queue)
-        self.thread.scrapeProgress.connect(self.progress_bar.setValue)
+        self.thread = ScraperThread(self.link_queue, self.ratio)
+
+        self.thread.totalPages.connect(
+            lambda n: self.scrape_labels[0].setText(f"页面总数: {n}")
+        )
+        self.thread.pages.connect(lambda n: self.scrape_labels[1].setText(f"爬取页面: {n}"))
+        self.thread.skipPages.connect(
+            lambda n: self.scrape_labels[2].setText(f"跳过爬取: {n}")
+        )
+        self.thread.images.connect(
+            lambda n: self.scrape_labels[3].setText(f"爬取壁纸总数: {n}")
+        )
         self.thread.finished.connect(self.scrapeFinished)
         self.thread.start()
 
         # Show progress bar and hide download button
-        self.progress_bar.setVisible(True)
         self.folder_button.setEnabled(False)
         self.download_button.setVisible(False)
+        self.ratio_combobox.setEnabled(False)
 
     def scrapeFinished(self):
         # Update status
         self.status_label.setText("下载壁纸中...")
         self.status_label.setStyleSheet("color: black;")
+        for label in self.download_labels:
+            label.setVisible(True)
 
         # Create a scraper thread and start it
         self.thread = DownloaderThread(self.link_queue, self.folder)
-        self.thread.downloadProgress.connect(self.progress_bar.setValue)
+        self.thread.downloaded.connect(
+            lambda n: self.download_labels[0].setText(f"已下载壁纸: {n}")
+        )
+        self.thread.failed.connect(
+            lambda n: self.download_labels[1].setText(f"下载失败: {n}")
+        )
         self.thread.finished.connect(self.downloadFinished)
         self.thread.start()
 
     def downloadFinished(self):
         # Hide progress bar and show download button
-        self.progress_bar.setVisible(False)
         self.folder_button.setEnabled(True)
         self.download_button.setVisible(True)
+        self.ratio_combobox.setEnabled(True)
 
         self.status_label.setText("下载完成")
 
 
 class ScraperThread(QThread):
     # Define a custom signal that will be emitted during the scrape process
-    scrapeProgress = pyqtSignal(int)
+    totalPages = pyqtSignal(int)
+    pages = pyqtSignal(int)
+    skipPages = pyqtSignal(int)
+    images = pyqtSignal(int)
 
-    def __init__(self, result_queue: queue.Queue):
+    def __init__(self, result_queue: queue.Queue, ratio):
         super().__init__()
         self.result_queue = result_queue
+        self.ratio = ratio
 
     def run(self):
-        links = scraper.scrape(lambda progress: self.scrapeProgress.emit(progress))
+        links = scraper.scrape(
+            self.totalPages, self.pages, self.skipPages, self.images, self.ratio
+        )
         print(links)
         for link in links:
             print(link)
@@ -129,22 +190,28 @@ class ScraperThread(QThread):
 
 class DownloaderThread(QThread):
     # Define a custom signal that will be emitted during the download process
-    downloadProgress = pyqtSignal(int)
+    downloaded = pyqtSignal(int)
+    failed = pyqtSignal(int)
 
     def __init__(self, task_queue: queue.Queue, folder):
         super().__init__()
         self.task_queue = task_queue
-        self.task_count = 0
+        self.task_count, self.failed_count = 0, 0
         self.total_task = task_queue.qsize()
         self.folder = folder
 
     def run(self):
         while not self.task_queue.empty():
             link = self.task_queue.get()
-            downloader.download(link, self.folder)
-            self.task_queue.task_done()
-            self.task_count += 1
-            self.downloadProgress.emit(int((self.task_count) * 100.0 / self.total_task))
+            try:
+                downloader.download(link, self.folder)
+                self.task_queue.task_done()
+                self.task_count += 1
+                self.downloaded.emit(self.task_count)
+            except:
+                self.failed.emit(int((self.task_count) * 100.0 / self.total_task))
+                self.failed_count += 1
+                self.failed.emit(self.failed_count)
 
 
 if __name__ == "__main__":
